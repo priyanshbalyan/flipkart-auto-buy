@@ -217,8 +217,8 @@ async function pollForPayment(token, transactionId, sleep = 1000, retries = 100)
     const primaryAction = response.data['primary_action'];
     const primaryActionURL = primaryAction['target'];
     const primaryActionData = primaryAction['parameters'];
-    const response = await authPost(primaryActionURL, primaryActionData);
-    console.log(response.status, response.headers);
+    const payResponse = await authPost(primaryActionURL, primaryActionData);
+    console.log(payResponse.status, payResponse.headers);
 }
 
 async function startPaymentProcess() {
