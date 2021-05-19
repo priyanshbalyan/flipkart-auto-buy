@@ -1,3 +1,4 @@
+'use strict';
 const axios = require('axios');
 const fs = require('fs');
 require('dotenv').config();
@@ -66,7 +67,7 @@ async function request(url, config, method = 'post', retries = 10) {
     return response;
 }
 
-function saveCookie(cookieString) {
+async function saveCookie(cookieString) {
     return fs.writeFileSync(COOKIE_PATH, cookieString);
 }
 
@@ -112,11 +113,11 @@ async function authenticate(retries = 3) {
         const response = await get('https://flipkart.com/');
 
         // save initial cookie
-        saveCookie(response.headers['set-cookie'].join('; '));
+        await saveCookie(response.headers['set-cookie'].join('; '));
         const authResponse = await authPost('https://1.rome.api.flipkart.com/api/4/user/authenticate', creds);
         console.log('AUTH RESPONSE:', authResponse.status, authResponse.data);
         // save auth cookies
-        saveCookie(authResponse.headers['set-cookie'].join('; '));
+        await saveCookie(authResponse.headers['set-cookie'].join('; '));
 
         if (!authResponse.data.SESSION.email) {
             console.log('Incorrect login, retrying...');
@@ -136,8 +137,9 @@ async function emptyCart() {
     };
     const fetchResponse = await authPost("https://1.rome.api.flipkart.com/api/4/page/fetch", viewCartPayload);
     try {
-        listId = fetchResponse.data["RESPONSE"]["slots"][6]["widget"]["data"]["actions"][1]["value"]["popupDetails"]["data"]["actions"][1]["action"]["params"]["listingId"]
-        productId = fetchResponse.data["RESPONSE"]["slots"][6]["widget"]["data"]["actions"][1]["value"]["popupDetails"]["data"]["actions"][1]["action"]["params"]["productId"]
+        const data = fetchResponse.data["RESPONSE"]["slots"][6]["widget"]["data"]["actions"][1]["value"]["popupDetails"]["data"]["actions"][1]["action"]["params"];
+        listId = data["listingId"];
+        productId = data["productId"];
         console.log('List id: ', listId);
         console.log('ProductId: ', productId);
         emptyCartPayload = {
@@ -267,7 +269,6 @@ async function init() {
     await authenticate();
     await emptyCart();
     await addToCart();
-
     console.log('Product added to cart.');
 
     await checkout();
