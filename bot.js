@@ -89,6 +89,17 @@ async function get(url) {
     return await request(url, payload, 'get');
 }
 
+async function authGet(url) {
+    const payload = {
+        headers: {
+            'User-Agent': USER_AGENT,
+            'X-User-Agent': X_USER_AGENT,
+            'Cookie': getCookie()
+        }
+    };
+    return await request(url, payload, 'get');
+}
+
 async function post(url, config) {
     return await request(url, config, 'post');
 }
@@ -131,18 +142,24 @@ async function authenticate(retries = 3) {
 }
 
 async function emptyCart() {
+    console.log('Trying to empty cart');
     const viewCartPayload = {
         pageUri: "/viewcart?otracker=PP_GoToCart",
         pageContext: { fetchSeoData: "true" }
     };
     const fetchResponse = await authPost("https://1.rome.api.flipkart.com/api/4/page/fetch", viewCartPayload);
     try {
-        const data = fetchResponse.data["RESPONSE"]["slots"][6]["widget"]["data"]["actions"][1]["value"]["popupDetails"]["data"]["actions"][1]["action"]["params"];
-        listId = data["listingId"];
-        productId = data["productId"];
+        const slots = fetchResponse.data['RESPONSE']['slots'];
+        if (slots.length < 7) {
+            console.log('Cart is already empty');
+            return;
+        }
+        const data = slots[6]["widget"]["data"]["actions"][1]["value"]["popupDetails"]["data"]["actions"][1]["action"]["params"];
+        const listId = data["listingId"];
+        const productId = data["productId"];
         console.log('List id: ', listId);
         console.log('ProductId: ', productId);
-        emptyCartPayload = {
+        const emptyCartPayload = {
             "actionRequestContext": {
                 "pageUri": "/viewcart",
                 "type": "CART_REMOVE",
@@ -154,11 +171,10 @@ async function emptyCart() {
         console.log('Cart emptied.');
     } catch (error) {
         console.log('Error emptying cart: ', error.message);
-        console.log('Cart is already empty (maybe)');
     }
 }
 
-async function addToCart(retries = 10, sleepTime = 5000) {
+async function addToCart(retries = 10000, sleepTime = 5000) {
     if (!retries) {
         console.log('Max retries exceeded');
         process.exit();
@@ -194,13 +210,11 @@ async function checkout() {
 }
 
 async function getPaymentToken() {
-    const data = {
-        headers: { Cookie: getCookie() }
-    }
-    const response = await get('https://1.rome.api.flipkart.com/api/3/checkout/paymentToken', data);
+    const response = await authGet('https://1.rome.api.flipkart.com/api/3/checkout/paymentToken');
 
     const token = response.data["RESPONSE"]["getPaymentToken"]["token"]
     console.log('Received payment token:', CHALK.YELLOW, token);
+    saveCookie(response.headers['set-cookie'].join('; '));
     return token;
 }
 
@@ -214,6 +228,8 @@ async function pollForPayment(token, transactionId, sleep = 1000, retries = 100)
         await sleep(1000);
         return await pollForPayment(token, transactionId, sleep, retries - 1);
     }
+
+    saveCookie(response.headers['set-cookie'].join('; '))
 
     console.log('Payment completed!');
     const primaryAction = response.data['primary_action'];
@@ -269,6 +285,7 @@ async function init() {
     await authenticate();
     await emptyCart();
     await addToCart();
+    console.log('\x07');
     console.log('Product added to cart.');
 
     await checkout();
