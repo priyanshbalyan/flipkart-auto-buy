@@ -199,7 +199,13 @@ async function addToCart(retries = 10000, sleepTime = 5000) {
 async function checkout() {
     const payload = { checkoutType: "PHYSICAL" };
     const response = await authPost("https://1.rome.api.flipkart.com/api/5/checkout?loginFlow=false", payload);
-    const itemId = response.data["RESPONSE"]["orderSummary"]["requestedStores"][0]["buyableStateItems"][0]["cartItemRefId"];
+
+    const buyableStateItems = response.data["RESPONSE"]["orderSummary"]["requestedStores"][0]["buyableStateItems"];
+    if (!buyableStateItems.length) {
+        console.log(response.data["RESPONSE"]["orderSummary"]);
+        throw new Error('Unable to checkout, product went out of stock');
+    }
+    const itemId = buyableStateItems[0]["cartItemRefId"];
     // selecting user's default address
     const address = response.data['RESPONSE']['addressData']['billingAddressInfos'].filter(item => item.isDefault)[0];
     const addressId = address.id;
@@ -218,15 +224,15 @@ async function getPaymentToken() {
     return token;
 }
 
-async function pollForPayment(token, transactionId, sleep = 1000, retries = 100) {
+async function pollForPayment(token, transactionId, sleepTime = 1000, retries = 100) {
     // Polling to check payment confirmation
     if (retries <= 0) throw new Error('Max Retries exceeded');
     const payload = { token: token, transactionId: transactionId };
     const response = await authPost('https://1.pay.payzippy.com/fkpay/api/v3/payments/upi/poll', payload)
     if (response.data['response_status'] !== 'SUCCESS') {
         console.log('Polling for payment completion...');
-        await sleep(1000);
-        return await pollForPayment(token, transactionId, sleep, retries - 1);
+        await sleep(sleepTime);
+        return await pollForPayment(token, transactionId, sleepTime, retries - 1);
     }
 
     saveCookie(response.headers['set-cookie'].join('; '))
@@ -254,7 +260,7 @@ async function startPaymentProcess() {
     const r2 = await authPost(queryString2, payload2);
 
     // Payment Step 3
-    payload3 = {
+    const payload3 = {
         upi_details: {
             upi_code: UPI_CODE,
             payment_instrument: 'UPI_COLLECT',
